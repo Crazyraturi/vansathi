@@ -19,6 +19,7 @@
       ],
       "expo-notifications",
       "@react-native-firebase/app",
+      "@react-native-firebase/crashlytics",
       "@maplibre/maplibre-react-native",
       ["expo-sqlite", { "useSQLCipher": true }],
       "expo-secure-store"
