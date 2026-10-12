@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "VanSathi",
+    "slug": "vansathi",
+    "scheme": "vansathi",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "VanSathi shares your location with parents while a trip is active.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      "expo-notifications",
+      "@react-native-firebase/app",
+      "@maplibre/maplibre-react-native",
+      ["expo-sqlite", { "useSQLCipher": true }],
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "android": {
+      "package": "com.vansathi.app",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "POST_NOTIFICATIONS"
+      ],
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "com.vansathi.app",
+      "supportsTablet": false
+    }
+  }
+}

@@ -1,0 +1,5 @@
+import React from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { colors, spacing, type } from '../theme/tokens';
+export function EmptyState({ title, body, actionLabel, onAction }: { title: string; body: string; actionLabel?: string; onAction?: () => void }) { return <View accessibilityLiveRegion="polite" style={styles.wrap}><Text style={styles.title}>{title}</Text><Text style={styles.body}>{body}</Text>{actionLabel && onAction ? <Pressable accessibilityRole="button" onPress={onAction} style={styles.action}><Text style={styles.actionText}>{actionLabel}</Text></Pressable> : null}</View>; }
+const styles = StyleSheet.create({ wrap: { gap: spacing.xs, paddingVertical: spacing.xl }, title: { color: colors.ink, fontSize: type.tagline.size, fontWeight: '600' }, body: { color: colors.mutedInk, fontSize: type.body.size, lineHeight: type.body.lineHeight }, action: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start', paddingHorizontal: spacing.md }, actionText: { color: colors.primary, fontSize: type.bodyStrong.size, fontWeight: '700' } });

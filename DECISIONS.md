@@ -1,0 +1,27 @@
+# Decisions
+
+- Working name: VanSathi, using the example from the supplied brief.
+- Keep one Expo application with `src/driver`, `src/parent`, and `src/shared` boundaries as roles are implemented. Expo Router currently holds the shared entry route.
+- Use Firebase native SDK packages exactly as requested. Local configuration files and all environment files except `.env.example` are excluded from version control.
+- Emulator ports follow Firebase defaults (Auth 9099, Firestore 8080, RTDB 9000, Functions 5001). Security rules start with default deny; no permissive pilot shortcut.
+- The provided Apple reference is summarized in `appledesign.md` and `apple-design.md`; it is the UI token source, and runtime values are in `src/shared/theme/tokens.ts`.
+- Broad Android battery-optimization exemption will not be requested. The later setup flow will deep-link to device settings, as requested in the brief.
+- No Firebase project ID, native config files, or map provider credentials were supplied. The app foundation remains configurable until those are provided.
+- Expo SDK 57 is used as the current stable baseline; its bundled compatibility map is used to align Router and Expo modules. The SDK docs list SDK 57 with React Native 0.86 and React 19.2.3.
+- Driver role selection does not itself grant driver privileges. A console-managed `driverApprovals/{E.164 phone}` record with an active van is required; the callable verifies the Firebase Auth phone claim and assigns the van server-side, preventing self-assigned driver access.
+- Parent links are made by a callable after verified phone match and by a Firestore create trigger for children added later. Firestore rules protect records; Admin SDK functions maintain the RTDB per-user/per-van access index needed to authorize active live-location reads.
+- The driver can edit only the assigned van's display and school setup fields. `driverUid`, approval records, parent links, and access indexes remain server-managed. Child home/school locations and stop order are bounded in Firestore rules.
+- Stop order uses a native drag handle and persists independent morning/afternoon integer indexes. Editing a parent's phone number causes a server trigger to detach the old link and attach a new exact phone match.
+- The Setup Health Check can verify location permission/precision, GPS availability, notification permission, and internet reachability. Android battery optimization has no dependable Expo status API; the screen opens system battery settings and records only the driver's confirmation. It deliberately avoids the broad exemption permission.
+- A MapLibre production style URL is required for map taps. With no provider URL, map tiles are not requested and the driver can still save a pin from the current location; no public OSM tile server is used.
+- Trip starts, stop transitions, and ends use authenticated callable functions. The function transactions enforce one active trip per van and use the shared pure stop-state machine. This keeps clients from writing arbitrary trip status values.
+- The current trip and its bounded (500 item) upload queue are stored in an SQLCipher database; an encryption key and active-trip pointer are held in SecureStore. SecureStore uses after-first-unlock device-only access so the background task can resume while the phone is locked after its first unlock.
+- Location callbacks reject fixes worse than 50 m accuracy, reported or derived speed above 120 km/h, and fixes older than 45 seconds. Moving mode uses high accuracy, 10-second minimum intervals, and 20 m distance; stationary mode switches to balanced accuracy and 60-second intervals. Live positions are never queued; breadcrumb points are sampled at 30-second buckets.
+- Parent driver phone details are returned from one authenticated callable for only the parent's linked vans; parent clients cannot read arbitrary driver profile documents.
+- Parent map ETA uses a rough distance/current-speed estimate with a 15 km/h floor and a two-minute minimum, because no routing or traffic provider is configured. The UI marks positions delayed after 60 seconds and unavailable after three minutes.
+- Driver proximity hints use a 500 m default radius (configurable up to 5 km) and are queued offline with deterministic event ids. School arrival uses a 150 m radius on morning trips; these hints never change stop statuses.
+- Parent absences and trip starts use Asia/Kolkata calendar dates. A scheduled monitor checks trip heartbeats every five minutes and closes trips after 30 minutes without a heartbeat; stale breadcrumb documents are pruned daily after 30 days.
+- The first signed-in session requires acceptance of a versioned English/Hindi privacy notice; Cloud Functions store its version and server timestamp. Parent account deletion unlinks children and removes absences; driver deletion requires no active trip and removes the van's children, trip/event history and route points.
+- Native App Check uses the development debug provider and release Play Integrity/App Attest fallback. All callable functions enforce App Check. Firebase Console enforcement for Firestore and Realtime Database remains a project-owner step after test-device metrics are verified.
+- Crashlytics collection is disabled in development and enabled in release. No user, phone, child or location values are attached as crash attributes.
+- Battery instructions are grouped for Xiaomi/Redmi, Vivo/Oppo/Realme, and Samsung; menu names vary by firmware, so drivers must confirm the visible setting on their handset.

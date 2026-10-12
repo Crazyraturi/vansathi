@@ -1,0 +1,133 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function userPath(uid) { return /databases/$(database)/documents/users/$(uid); }
+    function vanPath(vanId) { return /databases/$(database)/documents/vans/$(vanId); }
+    function hasUser() { return signedIn() && exists(userPath(request.auth.uid)); }
+    function me() { return get(userPath(request.auth.uid)).data; }
+    function isRole(role) { return hasUser() && me().role == role; }
+    function drives(vanId) {
+      return isRole('driver') && exists(vanPath(vanId)) && get(vanPath(vanId)).data.driverUid == request.auth.uid;
+    }
+    function parentHasVan(vanId) {
+      return isRole('parent') && vanId in me().vanIds;
+    }
+    function canReadVan(vanId) { return drives(vanId) || parentHasVan(vanId); }
+    function canReadTrip(trip) {
+      return canReadVan(trip.vanId) &&
+        (trip.status == 'started' || (trip.endedAt is timestamp && trip.endedAt > request.time - duration.value(30, 'd')));
+    }
+    function validPin(pin) {
+      return pin is map && pin.lat is number && pin.lat >= -90 && pin.lat <= 90 &&
+        pin.lng is number && pin.lng >= -180 && pin.lng <= 180;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, delete: if false;
+      allow update: if signedIn() && request.auth.uid == uid &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.phone == resource.data.phone &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'language', 'fcmTokens', 'notificationPreferences']) &&
+        request.resource.data.name is string && request.resource.data.name.size() <= 80 &&
+        request.resource.data.language in ['en', 'hi'] &&
+        request.resource.data.fcmTokens is list && request.resource.data.fcmTokens.size() <= 20 &&
+        (!('notificationPreferences' in request.resource.data) ||
+          (request.resource.data.notificationPreferences is map &&
+            request.resource.data.notificationPreferences.keys().hasOnly(['tripUpdates', 'locationWarnings', 'emergencyAlerts']) &&
+            request.resource.data.notificationPreferences.tripUpdates is bool &&
+            request.resource.data.notificationPreferences.locationWarnings is bool &&
+            request.resource.data.notificationPreferences.emergencyAlerts is bool));
+    }
+
+    match /driverApprovals/{phone} { allow read, write: if false; }
+
+    match /vans/{vanId} {
+      allow read: if canReadVan(vanId);
+      allow create, delete: if false;
+      allow update: if drives(vanId) && request.resource.data.driverUid == resource.data.driverUid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['number', 'name', 'seats', 'school', 'emergencyPhone']) &&
+        request.resource.data.number is string && request.resource.data.number.size() > 0 && request.resource.data.number.size() <= 24 &&
+        request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 &&
+        request.resource.data.seats is int && request.resource.data.seats >= 1 && request.resource.data.seats <= 100 &&
+        request.resource.data.school is map && request.resource.data.school.name is string &&
+        request.resource.data.school.name.size() > 0 && request.resource.data.school.name.size() <= 100 &&
+        validPin(request.resource.data.school) &&
+        (!('emergencyPhone' in request.resource.data) || request.resource.data.emergencyPhone == '' ||
+          (request.resource.data.emergencyPhone is string && request.resource.data.emergencyPhone.matches('^\\+[1-9][0-9]{7,14}$')));
+    }
+
+    match /children/{childId} {
+      allow read: if (resource.data.parentUid == request.auth.uid && isRole('parent')) || drives(resource.data.vanId);
+      allow create: if drives(request.resource.data.vanId) &&
+        request.resource.data.keys().hasOnly(['vanId', 'name', 'class', 'parentPhone', 'parentUid', 'homeLocation', 'morningOrder', 'afternoonOrder']) &&
+        request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 &&
+        request.resource.data.parentPhone is string && request.resource.data.parentPhone.matches('^\\+[1-9][0-9]{7,14}$') &&
+        request.resource.data.parentUid == null &&
+        request.resource.data.class is string && request.resource.data.class.size() <= 40 &&
+        validPin(request.resource.data.homeLocation) &&
+        request.resource.data.morningOrder is int && request.resource.data.morningOrder >= 0 && request.resource.data.morningOrder <= 499 &&
+        request.resource.data.afternoonOrder is int && request.resource.data.afternoonOrder >= 0 && request.resource.data.afternoonOrder <= 499;
+      allow update: if drives(resource.data.vanId) && request.resource.data.vanId == resource.data.vanId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'class', 'parentPhone', 'homeLocation', 'morningOrder', 'afternoonOrder']) &&
+        request.resource.data.parentUid == resource.data.parentUid &&
+        request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 &&
+        request.resource.data.parentPhone is string && (request.resource.data.parentPhone == '' || request.resource.data.parentPhone.matches('^\\+[1-9][0-9]{7,14}$')) &&
+        request.resource.data.class is string && request.resource.data.class.size() <= 40 &&
+        validPin(request.resource.data.homeLocation) &&
+        request.resource.data.morningOrder is int && request.resource.data.morningOrder >= 0 && request.resource.data.morningOrder <= 499 &&
+        request.resource.data.afternoonOrder is int && request.resource.data.afternoonOrder >= 0 && request.resource.data.afternoonOrder <= 499;
+      allow delete: if drives(resource.data.vanId);
+    }
+
+    match /trips/{tripId} {
+      allow read: if drives(resource.data.vanId) || canReadTrip(resource.data);
+      allow create, update, delete: if false;
+
+      match /events/{eventId} {
+        function parentCanReadEvent() {
+          return exists(/databases/$(database)/documents/trips/$(tripId)) &&
+            canReadTrip(get(/databases/$(database)/documents/trips/$(tripId)).data);
+        }
+        allow read: if parentCanReadEvent() ||
+          (exists(/databases/$(database)/documents/trips/$(tripId)) && drives(get(/databases/$(database)/documents/trips/$(tripId)).data.vanId));
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /tripPaths/{tripId} {
+      allow read: if drives(resource.data.vanId) || canReadTrip(resource.data);
+      allow create, update, delete: if false;
+
+      match /points/{pointId} {
+        function pathTrip() { return get(/databases/$(database)/documents/tripPaths/$(tripId)).data; }
+        function parentCanReadPath() { return exists(/databases/$(database)/documents/tripPaths/$(tripId)) && canReadTrip(pathTrip()); }
+        allow read: if parentCanReadPath() ||
+          (exists(/databases/$(database)/documents/tripPaths/$(tripId)) && drives(pathTrip().vanId));
+        allow create, update: if exists(/databases/$(database)/documents/tripPaths/$(tripId)) &&
+          drives(pathTrip().vanId) && pathTrip().status == 'started' &&
+          request.resource.data.keys().hasOnly(['lat', 'lng', 'accuracy', 'timestamp']) &&
+          request.resource.data.lat is number && request.resource.data.lat >= -90 && request.resource.data.lat <= 90 &&
+          request.resource.data.lng is number && request.resource.data.lng >= -180 && request.resource.data.lng <= 180 &&
+          request.resource.data.accuracy is number && request.resource.data.accuracy >= 0 && request.resource.data.accuracy <= 50 &&
+          request.resource.data.timestamp is int && request.resource.data.timestamp > 0;
+        allow delete: if false;
+      }
+    }
+
+    match /absences/{absenceId} {
+      allow read: if signedIn() && resource.data.parentUid == request.auth.uid;
+      allow create: if isRole('parent') && request.resource.data.parentUid == request.auth.uid &&
+        request.resource.data.childId is string &&
+        exists(/databases/$(database)/documents/children/$(request.resource.data.childId)) &&
+        get(/databases/$(database)/documents/children/$(request.resource.data.childId)).data.parentUid == request.auth.uid &&
+        request.resource.data.tripType in ['morning', 'afternoon'] &&
+        request.resource.data.date is string && request.resource.data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+      allow update, delete: if signedIn() && resource.data.parentUid == request.auth.uid;
+    }
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}

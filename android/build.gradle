@@ -1,0 +1,28 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+        classpath 'com.google.gms:google-services:4.4.4'
+    classpath('com.android.tools.build:gradle')
+    classpath('com.facebook.react:react-native-gradle-plugin')
+    classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')
+  }
+}
+
+allprojects {
+  repositories {
+    // Keep the locally downloaded Hermes artifact first so Android builds do not
+    // need to fetch its 108 MB AAR again from Maven Central.
+    maven { url = uri("$rootDir/work/maven-local") }
+    google()
+    mavenCentral()
+    maven { url = uri('https://www.jitpack.io') }
+  }
+}
+
+apply plugin: "expo-root-project"
+apply plugin: "com.facebook.react.rootproject"
